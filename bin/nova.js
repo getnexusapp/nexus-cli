@@ -46,9 +46,17 @@ const CLOUD = env("NEXUS_CLOUD_URL", "https://proxy.nexusworkspace.net").replace
 const WEBSITE = env("NEXUS_WEBSITE_URL", "https://www.nexusworkspace.net");
 const STATUS_PAGE = env("NEXUS_STATUS_URL", "https://status.nexusworkspace.net");
 const APP_NAME = env("NEXUS_APP_NAME", "Nexus");
+const IS_WIN = process.platform === "win32";
+const IS_LINUX = process.platform === "linux";
 const APP_EXE = env("NEXUS_APP_EXE", `${APP_NAME}.exe`);
+// Linux: the executable name and the dpkg/rpm package name (Tauri lower-cases the product name).
+const APP_BIN = env("NEXUS_APP_BIN", APP_NAME.toLowerCase());
+const APP_PKG = env("NEXUS_APP_PKG", APP_NAME.toLowerCase());
 const MIN_NODE = Number(env("NOVA_MIN_NODE", "20"));
-const PLATFORM_KEY = env("NOVA_PLATFORM_KEY", "windows-x86_64");
+const PLATFORM_KEY = env(
+  "NOVA_PLATFORM_KEY",
+  IS_LINUX ? `linux-${process.arch === "arm64" ? "aarch64" : "x86_64"}` : "windows-x86_64"
+);
 
 // The session token is sent to CLOUD, so it must always be a secure https endpoint.
 if (new URL(CLOUD).protocol !== "https:") {
@@ -61,6 +69,10 @@ if (new URL(CLOUD).protocol !== "https:") {
 const APP_KEYRING_SERVICE = "com.nexus.desktop";
 const APP_KEYRING_USER = "nexus_cloud_key";
 const APP_KEYRING_TARGET = `${APP_KEYRING_USER}.${APP_KEYRING_SERVICE}`;
+// On Linux the same crate talks to the Secret Service (GNOME Keyring / KWallet) and finds the
+// entry by these attributes, so Nova has to write them exactly the way the app does.
+const APP_KEYRING_ATTRS = ["service", APP_KEYRING_SERVICE, "username", APP_KEYRING_USER, "target", "default", "application", "rust-keyring"];
+const APP_KEYRING_LABEL = `keyring:${APP_KEYRING_USER}@${APP_KEYRING_SERVICE}`;
 
 const program = new Command();
 
@@ -70,6 +82,27 @@ const sha256 = (s) => createHash("sha256").update(s).digest("hex");
 const cleanVersion = (v) => String(v ?? "").trim().replace(/^v/i, "");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const exists = (p) => fs.access(p).then(() => true, () => false);
+
+/** Finds an executable on PATH (no shell involved). */
+async function which(name) {
+  for (const dir of (process.env.PATH || "").split(path.delimiter).filter(Boolean)) {
+    const p = path.join(dir, name);
+    try {
+      if ((await fs.stat(p)).isFile()) {
+        await fs.access(p, fs.constants.X_OK);
+        return p;
+      }
+    } catch {
+      /* keep looking */
+    }
+  }
+  return null;
+}
+
+const xdgData = () => process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share");
+const xdgConfig = () => process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+const isRoot = () => typeof process.getuid === "function" && process.getuid() === 0;
+const platformLabel = () => (IS_LINUX ? "Linux" : "Windows");
 
 function compareVersions(a, b) {
   const parse = (v) => cleanVersion(v).split("-")[0].split(".").map((n) => parseInt(n, 10) || 0);
@@ -159,7 +192,7 @@ function fmtDuration(ms) {
 
 /* --------------------------- platform support ----------------------- */
 
-const OS_NAMES = { darwin: "macOS", linux: "Linux" };
+const OS_NAMES = { darwin: "macOS" };
 
 /** Windows 10 reports build < 22000; Windows 11 reports 22000+. */
 function windowsInfo() {
@@ -167,18 +200,37 @@ function windowsInfo() {
   return { major, build, name: build >= 22000 ? "Windows 11" : "Windows 10" };
 }
 
-/** Nexus is only available for Windows 10/11 right now. Throws on anything else. */
+/** Distro name from /etc/os-release, and whether we're running inside WSL. */
+function linuxInfo() {
+  let name = "Linux";
+  try {
+    const m = readFileSync("/etc/os-release", "utf8").match(/^PRETTY_NAME=(.*)$/m);
+    if (m) name = m[1].trim().replace(/^["']|["']$/g, "") || name;
+  } catch {
+    /* no os-release: keep the generic name */
+  }
+  return { name, wsl: /microsoft|wsl/i.test(os.release()) };
+}
+
+/** Nexus is available for Windows 10/11 and Linux (x64 or ARM64). Throws on anything else. */
 function assertSupported() {
-  if (process.platform !== "win32") {
+  if (!IS_WIN && !IS_LINUX) {
     const name = OS_NAMES[process.platform] || process.platform;
-    throw new Error(`Nova currently supports Windows 10 and 11 only (this is ${name}). Nexus isn't available for other systems yet.`);
+    throw new Error(`Nova currently supports Windows 10/11 and Linux only (this is ${name}). Nexus isn't available for other systems yet.`);
   }
   if (process.arch !== "x64" && process.arch !== "arm64") {
-    throw new Error(`Unsupported CPU architecture: ${process.arch}. Nexus needs a 64-bit Windows PC (x64 or ARM64).`);
+    throw new Error(`Unsupported CPU architecture: ${process.arch}. Nexus needs a 64-bit ${platformLabel()} system (x64 or ARM64).`);
+  }
+  if (IS_LINUX) {
+    const l = linuxInfo();
+    return { name: l.name, wsl: l.wsl, detail: `${l.name}, ${process.arch}${l.wsl ? " (WSL)" : ""}` };
   }
   const win = windowsInfo();
   if (win.major < 10) throw new Error("Nexus requires Windows 10 or Windows 11.");
-  return win;
+  return {
+    name: win.name,
+    detail: `${win.name} (${os.release()}), ${process.arch}${process.arch === "arm64" ? ", runs the x64 build under emulation" : ""}`,
+  };
 }
 
 /* ------------------------- release discovery ------------------------ */
@@ -270,13 +322,45 @@ async function resolveInstaller(release) {
   throw new Error(`Nexus ${release.version} has no Windows installer yet. Check ${RELEASES} for available downloads.`);
 }
 
+const LINUX_FORMATS = { deb: /\.deb$/i, rpm: /\.rpm$/i, appimage: /\.appimage$/i };
+
+/** Picks the first available Linux package, in the order of `formats`, built for this CPU. */
+function pickLinuxPackage(assets, formats) {
+  const arm = process.arch === "arm64";
+  for (const format of formats) {
+    const hit = assets.find((a) => {
+      if (!/^nexus/i.test(a.name) || !LINUX_FORMATS[format].test(a.name)) return false;
+      // No emulation on Linux, so the architecture has to match (an untagged asset is assumed x64).
+      return arm ? ARM_RE.test(a.name) : !ARM_RE.test(a.name);
+    });
+    if (hit) return { ...hit, format };
+  }
+  return null;
+}
+
+async function resolveLinuxPackage(release, formats) {
+  const assets = await loadAssets(release);
+  const picked = assets.length ? pickLinuxPackage(assets, formats) : null;
+  if (picked) return picked;
+
+  // Fallback: the platform URLs from latest.json (Tauri may key them "linux-x86_64-appimage" etc).
+  for (const key of [PLATFORM_KEY, `${PLATFORM_KEY}-appimage`, `${PLATFORM_KEY}-deb`, `${PLATFORM_KEY}-rpm`]) {
+    const url = release.platforms?.[key]?.url;
+    if (!url) continue;
+    const name = path.basename(new URL(url).pathname);
+    const format = formats.find((f) => LINUX_FORMATS[f].test(name));
+    if (format) return { name, url, sha256: null, format };
+  }
+
+  throw new Error(`Nexus ${release.version} has no Linux package (${formats.join("/")}) for ${process.arch} yet. Check ${RELEASES} for available downloads.`);
+}
+
 /* ------------------------- installed-app detection ------------------ */
 
 const UNINSTALL = "\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\" + APP_NAME;
 
 /** Installed Nexus version from the Windows uninstall registry, or null. */
-async function getInstalledVersion() {
-  if (process.platform !== "win32") return null;
+async function getWindowsInstalledVersion() {
   const keys = [`HKCU${UNINSTALL}`, `HKLM${UNINSTALL}`, `HKLM\\Software\\WOW6432Node${UNINSTALL.replace("\\Software", "")}`];
   for (const key of keys) {
     try {
@@ -290,10 +374,74 @@ async function getInstalledVersion() {
   return null;
 }
 
+const appImageMetaPath = () => path.join(xdgData(), "nova", "appimage.json");
+
+try {
+  const { file: desktopFile, iconFound } = await writeDesktopEntry(target, dir);
+  console.log(`Added a launcher entry: ${desktopFile}`);
+  if (!iconFound) console.log("Couldn't extract an icon from the AppImage; set NEXUS_ICON_PATH to use your own.");
+} catch (err) {
+  console.log(`Note: couldn't create the launcher entry (${err.message}).`);
+}
+
+async function readAppImageMeta() {
+  try {
+    const m = JSON.parse(await fs.readFile(appImageMetaPath(), "utf8"));
+    return typeof m?.version === "string" && typeof m?.path === "string" ? m : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Strips the Debian epoch ("1:") and packaging revision ("-1", "-1ubuntu2"). */
+const cleanDebVersion = (v) => cleanVersion(v).replace(/^\d+:/, "").replace(/-\d[\w.+~]*$/, "");
+
+/** Linux: { version, source: "deb" | "rpm" | "appimage", exePath? } or null. */
+async function getLinuxInstalled() {
+  if (await which("dpkg-query")) {
+    try {
+      const { stdout } = await execFileAsync("dpkg-query", ["-W", "-f=${db:Status-Abbrev}\t${Version}", APP_PKG]);
+      const [status, ver] = stdout.split("\t");
+      if (status.trim().startsWith("ii") && ver?.trim()) return { version: cleanDebVersion(ver), source: "deb" };
+    } catch {
+      /* not installed as a deb */
+    }
+  }
+  if (await which("rpm")) {
+    try {
+      const { stdout } = await execFileAsync("rpm", ["-q", "--qf", "%{VERSION}", APP_PKG]);
+      if (stdout.trim()) return { version: cleanVersion(stdout), source: "rpm" };
+    } catch {
+      /* not installed as an rpm */
+    }
+  }
+  const meta = await readAppImageMeta();
+  if (meta && (await exists(meta.path))) return { version: cleanVersion(meta.version), source: "appimage", exePath: meta.path };
+  return null;
+}
+
+/** { version, source } for the installed Nexus app on this OS, or null. `source` tells updates which format to keep using. */
+async function getInstalledInfo() {
+  if (IS_LINUX) return getLinuxInstalled();
+  if (!IS_WIN) return null;
+  const version = await getWindowsInstalledVersion();
+  return version ? { version, source: "windows" } : null;
+}
+
+async function getInstalledVersion() {
+  return (await getInstalledInfo())?.version ?? null;
+}
+
 /** Returns { version, exePath } if the Nexus desktop app is installed, else null. */
 async function findInstalledApp() {
-  if (process.platform !== "win32") return null;
-  const version = await getInstalledVersion();
+  if (IS_LINUX) {
+    const info = await getLinuxInstalled();
+    if (!info) return null;
+    const exePath = info.exePath ?? (await which(APP_BIN)) ?? (await which(APP_NAME));
+    return { version: info.version, exePath };
+  }
+  if (!IS_WIN) return null;
+  const version = await getWindowsInstalledVersion();
   const roots = [process.env.LOCALAPPDATA, process.env["ProgramFiles"], process.env["ProgramFiles(x86)"]].filter(Boolean);
   const candidates = roots.flatMap((r) => [path.join(r, APP_NAME, APP_EXE), path.join(r, "Programs", APP_NAME, APP_EXE)]);
 
@@ -308,7 +456,15 @@ async function findInstalledApp() {
 }
 
 async function isAppRunning() {
-  if (process.platform !== "win32") return false;
+  if (IS_LINUX) {
+    try {
+      await execFileAsync("pgrep", ["-x", "-i", APP_BIN]);
+      return true; // pgrep exits 1 when nothing matches
+    } catch {
+      return false;
+    }
+  }
+  if (!IS_WIN) return false;
   try {
     const { stdout } = await execFileAsync("tasklist", ["/FI", `IMAGENAME eq ${APP_EXE}`, "/NH"], { windowsHide: true });
     return stdout.toLowerCase().includes(APP_EXE.toLowerCase());
@@ -351,8 +507,38 @@ public static class NovaCred {
 [NovaCred]::Write($env:NOVA_TARGET, $env:NOVA_USER, $env:NOVA_SECRET)
 `;
 
+/** Linux: stores the key in the Secret Service keyring via libsecret's `secret-tool`. */
+async function writeLinuxCredential(key) {
+  const tool = await which("secret-tool");
+  if (!tool) {
+    throw new Error(
+      "Couldn't write the sign-in to the Nexus app: `secret-tool` was not found. Install libsecret-tools (Debian/Ubuntu) or libsecret (Fedora/openSUSE/Arch) and make sure a keyring such as GNOME Keyring or KWallet is running."
+    );
+  }
+  try {
+    await new Promise((resolve, reject) => {
+      // The secret goes through stdin, never the command line or the environment.
+      const child = spawn(tool, ["store", `--label=${APP_KEYRING_LABEL}`, ...APP_KEYRING_ATTRS], {
+        stdio: ["pipe", "ignore", "pipe"],
+        timeout: 60_000,
+      });
+      let stderr = "";
+      child.stderr.on("data", (d) => (stderr += d));
+      child.stdin.on("error", () => { });
+      child.once("error", reject);
+      child.once("close", (code) =>
+        code === 0 ? resolve() : reject(new Error(stderr.trim().split("\n")[0] || `secret-tool exited with code ${code}`))
+      );
+      child.stdin.end(key);
+    });
+  } catch (err) {
+    throw new Error(`Couldn't write the sign-in to the Nexus app: ${err.message}`);
+  }
+}
+
 /** Stores the key in Windows Credential Manager, where the Nexus app reads it on startup. */
 async function writeAppCredential(key) {
+  if (IS_LINUX) return writeLinuxCredential(key);
   const encoded = Buffer.from(CRED_WRITE_PS, "utf16le").toString("base64");
   try {
     await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded], {
@@ -368,6 +554,14 @@ async function writeAppCredential(key) {
 }
 
 async function deleteAppCredential() {
+  if (IS_LINUX) {
+    try {
+      await execFileAsync("secret-tool", ["clear", "service", APP_KEYRING_SERVICE, "username", APP_KEYRING_USER], { timeout: 15_000 });
+    } catch {
+      /* nothing stored, or no secret-tool */
+    }
+    return;
+  }
   try {
     await execFileAsync("cmdkey", [`/delete:${APP_KEYRING_TARGET}`], { windowsHide: true });
   } catch {
@@ -452,8 +646,191 @@ function launchInstaller(file, args, wait) {
   });
 }
 
+/** Which Linux formats to consider, best first. */
+async function linuxFormatOrder(requested, installedSource) {
+  if (requested) {
+    const f = String(requested).toLowerCase();
+    if (!LINUX_FORMATS[f]) throw new Error("--format must be deb, rpm or appimage.");
+    return [f];
+  }
+  // Updating an existing install must stay in its format, or you'd end up with two copies.
+  if (installedSource && LINUX_FORMATS[installedSource]) return [installedSource];
+  return linuxAvailableFormats();
+}
+
+async function linuxAvailableFormats() {
+  const formats = [];
+  if ((await which("dpkg")) && (await which("apt-get"))) formats.push("deb");
+  if ((await which("rpm")) && ((await which("dnf")) || (await which("zypper")) || (await which("yum")))) formats.push("rpm");
+  formats.push("appimage");
+  return formats;
+}
+
+function runInherit(file, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(file, args, { stdio: "inherit" });
+    child.once("error", reject);
+    child.once("exit", (code) => resolve(code ?? 1));
+  });
+}
+
+/** Runs a command as root: directly if we are root, otherwise through sudo (TTY) or pkexec (no TTY). */
+async function runPrivileged(cmd, args, envPairs = []) {
+  const inner = envPairs.length ? ["env", ...envPairs, cmd, ...args] : [cmd, ...args];
+  if (isRoot()) return runInherit(inner[0], inner.slice(1));
+  let tool = null;
+  for (const t of process.stdin.isTTY ? ["sudo", "pkexec"] : ["pkexec", "sudo"]) {
+    if (await which(t)) {
+      tool = t;
+      break;
+    }
+  }
+  if (!tool) throw new Error("Installing needs root and neither sudo nor pkexec was found. Re-run Nova as root, or use `--format appimage` (no root needed).");
+  return runInherit(tool, inner);
+}
+
+async function installSystemPackage(format, file, opts) {
+  const auto = Boolean(opts.silent || opts.passive);
+  if (format === "deb") {
+    if (!(await which("apt-get"))) throw new Error("apt-get was not found. Use `--format appimage`, or install the .deb yourself.");
+    const args = ["install", ...(auto ? ["-y"] : []), ...(opts.silent ? ["-qq"] : []), ...(opts.force ? ["--reinstall"] : []), file];
+    return runPrivileged("apt-get", args, auto ? ["DEBIAN_FRONTEND=noninteractive"] : []);
+  }
+  const mgr = (await which("dnf")) ? "dnf" : (await which("zypper")) ? "zypper" : (await which("yum")) ? "yum" : null;
+  if (!mgr) throw new Error("No rpm package manager (dnf, zypper or yum) was found. Use `--format appimage`, or install the .rpm yourself.");
+  const args =
+    mgr === "zypper"
+      ? [...(auto ? ["--non-interactive"] : []), "install", "--allow-unsigned-rpm", ...(opts.force ? ["--force"] : []), file]
+      : [opts.force ? "reinstall" : "install", ...(auto ? ["-y"] : []), file];
+  return runPrivileged(mgr, args);
+}
+
+const desktopEntryPath = () => path.join(xdgData(), "applications", `${APP_BIN}.desktop`);
+
+/** Escapes a value for a quoted Exec= argument in a .desktop file. */
+const desktopQuote = (s) => `"${s.replace(/(["`$\\])/g, "\\$1")}"`;
+
+const BUNDLED_ICON = fileURLToPath(new URL("./nexus.png", import.meta.url));
+
+/** Copies the icon that ships with Nova next to the AppImage. Returns its path, or null. */
+async function installIcon(destDir) {
+  const override = env("NEXUS_ICON_PATH", "");
+  const src = override && (await exists(override)) ? override : BUNDLED_ICON;
+  if (!(await exists(src))) return null;
+  const dest = path.join(destDir, `${APP_BIN}${path.extname(src) || ".png"}`);
+  try {
+    await fs.copyFile(src, dest);
+    return dest;
+  } catch {
+    return null;
+  }
+}
+
+/** Writes ~/.local/share/applications/<bin>.desktop so Nexus shows up in app menus. */
+async function writeDesktopEntry(appImage, dataDir) {
+  const icon = (await installIcon(dataDir)) ?? APP_BIN; // theme-name fallback
+  const entry = [
+    "[Desktop Entry]",
+    "Type=Application",
+    `Name=${APP_NAME}`,
+    `Comment=${APP_NAME} workspace`,
+    `Exec=${desktopQuote(appImage)} %U`,
+    `Icon=${icon}`,
+    "Terminal=false",
+    "Categories=Office;Utility;",
+    "",
+  ].join("\n");
+
+  const file = desktopEntryPath();
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, entry, { mode: 0o644 });
+
+  const udd = await which("update-desktop-database");
+  if (udd) await execFileAsync(udd, [path.dirname(file)]).catch(() => { });
+  return { file, iconFound: icon !== APP_BIN };
+}
+
+/** AppImages need no root: keep one copy under ~/.local/share/<app> and link it into ~/.local/bin. */
+async function installAppImage(file, release) {
+  const dir = path.join(xdgData(), APP_BIN);
+  const target = path.join(dir, `${APP_NAME}.AppImage`);
+  const binDir = path.join(os.homedir(), ".local", "bin");
+  const link = path.join(binDir, APP_BIN);
+  await fs.mkdir(dir, { recursive: true });
+  await fs.mkdir(binDir, { recursive: true });
+
+  // Stage then rename, so an update works even while the old AppImage is running.
+  const staged = `${target}.new`;
+  try {
+    await fs.copyFile(file, staged);
+    await fs.chmod(staged, 0o755);
+    await fs.rename(staged, target);
+  } catch (err) {
+    await fs.rm(staged, { force: true }).catch(() => { }); // don't leave a half-copied file behind
+    throw err;
+  }
+
+  // Only create the link if it's absent or already ours; never clobber someone else's file.
+  const st = await fs.lstat(link).catch(() => null);
+  let ours = false;
+  if (st?.isSymbolicLink()) {
+    const current = await fs.readlink(link).catch(() => null);
+    ours = current !== null && path.resolve(binDir, current) === target; // handles relative links
+  }
+  const linked = !st || ours;
+  if (!st) await fs.symlink(target, link); // an existing link of ours already points at the right file
+
+  await fs.mkdir(path.dirname(appImageMetaPath()), { recursive: true });
+  await fs.writeFile(appImageMetaPath(), JSON.stringify({ version: release.version, path: target, installedAt: new Date().toISOString() }, null, 2));
+
+  try {
+    const { file: desktopFile, iconFound } = await writeDesktopEntry(target, dir);
+    console.log(`Added a launcher entry: ${desktopFile}`);
+    if (!iconFound) console.log("Couldn't find an icon to install; the launcher will use a generic one.");
+  } catch (err) {
+    console.log(`Note: couldn't create the launcher entry (${err.message}).`);
+  }
+
+  console.log(`Nexus ${release.version} installed to ${target}.`);
+  if (linked) {
+    console.log(`Start it with \`${APP_BIN}\`.`);
+    if (!(process.env.PATH || "").split(path.delimiter).includes(binDir)) console.log(`Note: ${binDir} is not on your PATH yet.`);
+  } else {
+    console.log(`${link} already exists and isn't Nova's link, so it was left alone. Run ${target} directly.`);
+  }
+  console.log("If it won't start, install FUSE 2 (libfuse2 / libfuse2t64), which AppImages need.");
+}
+
+async function installLinux(release, opts) {
+  const formats = await linuxFormatOrder(opts.format, opts.installedSource);
+  const pkg = await resolveLinuxPackage(release, formats);
+  console.log(`Downloading Nexus ${release.version} for Linux (${pkg.name})...`);
+
+  if (await isAppRunning()) console.log("Note: Nexus is running. Close it so the update can take effect.");
+
+  // The package manager runs as root (and apt as the _apt user), so the file must be readable
+  // by others; the directory stays writable only by us.
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "nova-"));
+  await fs.chmod(dir, 0o755);
+  const dest = path.join(dir, path.basename(pkg.name));
+  try {
+    await downloadFile(pkg.url, dest, pkg.sha256);
+    if (pkg.format === "appimage") {
+      await installAppImage(dest, release);
+    } else {
+      console.log(`Installing the ${pkg.format} package (this needs root)...`);
+      const code = await installSystemPackage(pkg.format, dest, opts);
+      if (code !== 0) throw new Error(`The package manager exited with code ${code}.`);
+      console.log(`Nexus ${release.version} installed.`);
+    }
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => { });
+  }
+}
+
 async function installRelease(release, opts = {}) {
   assertSupported();
+  if (IS_LINUX) return installLinux(release, opts);
   const pkg = await resolveInstaller(release);
   console.log(`Downloading Nexus ${release.version} for Windows (${pkg.name})...`);
 
@@ -485,7 +862,7 @@ async function installRelease(release, opts = {}) {
 /* ----------------------------- credentials -------------------------- */
 
 function credentialsPath() {
-  const base = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
+  const base = IS_WIN ? process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming") : xdgConfig();
   return path.join(base, "nova", "credentials.json");
 }
 
@@ -500,8 +877,10 @@ async function loadCredentials() {
 
 async function saveCredentials(creds) {
   const file = credentialsPath();
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, JSON.stringify(creds, null, 2));
+  await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
+  // It holds a bearer token: owner-only on Linux (mode only applies when the file is created, so chmod too).
+  await fs.writeFile(file, JSON.stringify(creds, null, 2), { mode: 0o600 });
+  await fs.chmod(file, 0o600).catch(() => { });
 }
 
 async function clearCredentials() {
@@ -554,8 +933,14 @@ async function doLogin(provider, { browser }) {
   console.log(`Signing in with ${provider === "google" ? "Google" : "GitHub"}.`);
   console.log(`\n  Confirmation code:  ${confirmCode(state)}\n`);
   console.log("After you authorize, the browser asks you to confirm. Only continue if it shows this same code.");
-  if (browser) await openUrl(url);
-  else console.log(`Open this link:\n${url}`);
+  if (browser) {
+    if (IS_LINUX && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
+      console.log("No display detected; trying to open a browser anyway. If nothing opens, use the link below.");
+    }
+    await openUrl(url); // launches the browser if it can, and always prints the link too
+  } else {
+    console.log(`Open this link:\n${url}`);
+  }
   console.log("\nWaiting for sign-in (Ctrl+C to cancel)...");
 
   const deadline = Date.now() + 10 * 60_000;
@@ -605,7 +990,7 @@ program.addHelpText(
   "after",
   `
 Examples:
-  nova install            Install the latest Nexus for Windows
+  nova install            Install the latest Nexus for your system
   nova update             Install the latest release only if it's newer
   nova check              Show installed vs. latest version
   nova login              Sign in or sign up (Google/GitHub); requires Nexus installed
@@ -618,21 +1003,24 @@ Examples:
   nova doctor             Diagnose your setup
   nova version            Show CLI version
 
-Nexus is currently available for Windows 10 and 11 only.
+Nexus is available for Windows 10/11 and Linux (x64 and ARM64).
+On Linux, Nova installs the .deb or .rpm with your package manager (needs root),
+or an AppImage under ~/.local (no root). Use --format to choose.
 `
 );
 
 program
   .command("install")
-  .description("Download and install the latest Nexus for Windows")
+  .description("Download and install the latest Nexus for your system")
   .option("--passive", "show installer progress but require no interaction")
   .option("--silent", "install with no UI at all")
+  .option("--format <format>", "Linux only: deb, rpm or appimage (default: auto-detect)")
   .action(
     run(async (opts) => {
       assertSupported();
       console.log("Checking the latest Nexus release...");
-      const release = await getLatestRelease();
-      await installRelease(release, opts);
+      const [release, info] = await Promise.all([getLatestRelease(), getInstalledInfo()]);
+      await installRelease(release, { ...opts, installedSource: info?.source });
     })
   );
 
@@ -642,11 +1030,13 @@ program
   .option("-f, --force", "reinstall even if already up to date")
   .option("--passive", "show installer progress but require no interaction")
   .option("--silent", "install with no UI at all")
+  .option("--format <format>", "Linux only: deb, rpm or appimage (default: the format already installed)")
   .action(
     run(async (opts) => {
       assertSupported();
       console.log("Checking the latest Nexus release...");
-      const [release, installed] = await Promise.all([getLatestRelease(), getInstalledVersion()]);
+      const [release, info] = await Promise.all([getLatestRelease(), getInstalledInfo()]);
+      const installed = info?.version ?? null;
       if (installed && compareVersions(installed, release.version) >= 0 && !opts.force) {
         console.log(`Nexus is up to date (${installed}).`);
         return;
@@ -654,7 +1044,7 @@ program
       console.log(
         installed ? `Update available: ${installed} -> ${release.version}` : `Installing Nexus ${release.version} (installed version unknown).`
       );
-      await installRelease(release, opts);
+      await installRelease(release, { ...opts, installedSource: info?.source });
     })
   );
 
@@ -669,7 +1059,7 @@ program
       console.log(`Installed version: ${installed ?? "not detected"}`);
       if (installed) {
         console.log(compareVersions(installed, release.version) < 0 ? "An update is available. Run `nova update`." : "You're up to date.");
-      } else if (process.platform === "win32") {
+      } else if (IS_WIN || IS_LINUX) {
         console.log("Nexus doesn't appear to be installed. Run `nova install`.");
       }
       console.log(RELEASES);
@@ -788,10 +1178,17 @@ program
       line(major >= MIN_NODE, "Node.js", `${process.version} (need >= ${MIN_NODE})`);
 
       try {
-        const win = assertSupported();
-        line(true, "Platform", `${win.name} (${os.release()}), ${process.arch}${process.arch === "arm64" ? ", runs the x64 build under emulation" : ""}`);
+        line(true, "Platform", assertSupported().detail);
       } catch (err) {
         line(false, "Platform", err.message);
+      }
+
+      if (IS_LINUX) {
+        line(true, "Install formats", (await linuxAvailableFormats()).join(", "));
+        const st = await which("secret-tool");
+        console.log(`${st ? "✓" : "–"} Keyring tool: ${st ? "secret-tool" : "secret-tool not found (needed to sign in the Nexus app; install libsecret-tools)"}`);
+        const display = Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
+        console.log(`${display ? "✓" : "–"} Display: ${display ? "found" : "none detected (nova login will still try to open a browser; use --no-browser to just print the link)"}`);
       }
 
       try {
