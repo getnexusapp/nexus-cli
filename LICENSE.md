@@ -1,6 +1,6 @@
 # Nova CLI License
 
-*Last updated: October 16, 2026*
+*Last updated: October 18, 2026*
 
 **Copyright © 2026 Nawrasse Andaloussi Dahman. All Rights Reserved.**
 
@@ -20,11 +20,12 @@ If this License and the Software License conflict, the Software License controls
 
 ## 2. What is Nova?
 
-Nova is a command-line tool for Windows. It can:
+Nova is a command-line tool for Windows and Linux. It can:
 
-- find the latest Nexus release and download, verify and launch the Nexus installer;
+- find the latest Nexus release and download, verify and launch or run the Nexus installer for your system (on Windows, the Nexus installer; on Linux, a `.deb` or `.rpm` package installed with your package manager, or an AppImage installed in your home directory);
 - check which version of Nexus is installed and whether an update is available;
-- sign you in to the Nexus Cloud Service with a supported provider and, on your computer, share that session with the installed Nexus app;
+- sign you in to the Nexus Cloud Service with a supported provider and, on your computer, share that session with the installed Nexus app through your operating system's credential storage (Windows Credential Manager, or the Secret Service keyring on Linux);
+- create a launcher entry in your user account's application menu for AppImage installs on Linux;
 - show your account details, your Nexus Cloud usage, and the health of the Nexus Cloud Service;
 - open Nexus web pages; and
 - diagnose whether your setup is ready.
@@ -36,7 +37,7 @@ Nova does not open or read your Nexus notes database, and this License does not 
 Subject to your compliance with this License and the Software License, the Operator grants you a limited, non-exclusive, non-transferable, non-sublicensable, revocable license to:
 
 1. install Nova from the official npm package **@getnexus/nova**, or run it with `npx`, on computers that you own or are authorized to control;
-2. use Nova for your personal purposes, or for the internal business purposes of an organization you represent, including running it from your own scripts, scheduled tasks and internal automation to install, update and check Nexus on your own computers; and
+2. use Nova for your personal purposes, or for the internal business purposes of an organization you represent, including running it from your own scripts, scheduled tasks and internal automation to install, update and check Nexus on your own computers (whether Windows or Linux); and
 3. make the temporary copies of Nova that are a normal part of running it, such as the npm cache and package installation folders.
 
 Nova is provided to you free of charge. This License grants a right to use Nova only. It does not transfer ownership of Nova or any intellectual-property rights to you. No implied license is granted, and all rights not expressly granted are reserved.
@@ -45,17 +46,18 @@ Nova is provided to you free of charge. This License grants a right to use Nova 
 
 Except to the extent expressly permitted by this License, a separate written agreement, an applicable third-party license, or mandatory law, you may not, and may not knowingly permit or help anyone else to:
 
-1. copy, publish, mirror or redistribute Nova, including by republishing it, or a modified version of it, to npm or any other package registry, repository or download site;
-2. bundle or include Nova in a product, service, installer or distribution that you give or sell to others;
+1. copy, publish, mirror or redistribute Nova, including by republishing it, or a modified version of it, to npm or any other package registry, repository or download site (including Linux distribution repositories, PPAs, Flatpak or Snap stores, and similar channels);
+2. bundle or include Nova in a product, service, installer, container image or distribution that you give or sell to others;
 3. modify, adapt, translate, fork or create derivative works of Nova;
 4. reverse engineer, decompile or attempt to derive source code, algorithms or non-public interfaces from Nova, except to the extent applicable law expressly permits that and it cannot be restricted by agreement;
 5. remove, obscure or alter copyright, trademark or proprietary notices;
 6. present a modified, unofficial or imitation tool as Nova, or as endorsed by, or affiliated with, Nexus;
 7. use Nova, or its sign-in flow, to access the Nexus Cloud Service through any means other than the official Nexus applications and Nova, or to bypass authentication, usage limits, rate limits or other protective measures;
-8. extract, copy or use a session key or other credential created by Nova outside Nova and the official Nexus application, or write credentials into the Nexus app's credential storage by any means other than Nova's own sign-in;
+8. extract, copy or use a session key or other credential created by Nova outside Nova and the official Nexus application, or write credentials into the Nexus app's credential storage (including Windows Credential Manager and the Linux Secret Service keyring) by any means other than Nova's own sign-in;
 9. use Nova to automate abuse of the Nexus Cloud Service, including sending traffic intended to overload it, scrape it or interfere with its availability or security;
-10. use Nova to download, install or distribute anything other than the official Nexus releases it is designed to install, or to attempt to point it at servers or release sources that the Operator has not authorized, in order to deliver software to other people's computers; or
-11. use Nova to violate applicable law or the rights of others.
+10. use Nova to download, install or distribute anything other than the official Nexus releases it is designed to install, or to attempt to point it at servers or release sources that the Operator has not authorized, in order to deliver software to other people's computers;
+11. use Nova's ability to run package managers with elevated privileges (such as through `sudo` or `pkexec` on Linux) for any purpose other than installing or updating the official Nexus releases it downloads; or
+12. use Nova to violate applicable law or the rights of others.
 
 Nothing in this section prohibits conduct that applicable law expressly permits and that cannot lawfully be restricted by contract.
 
@@ -77,7 +79,7 @@ You retain all rights you have in Your Content. Nothing in this License transfer
 
 ## 7. Third-Party Components
 
-Nova depends on third-party open-source packages, currently including Commander and open, which are distributed under their own licenses. Nova also runs on Node.js and uses features of Windows, PowerShell, and the Nexus release and cloud services.
+Nova depends on third-party open-source packages, currently including Commander and open, which are distributed under their own licenses. Nova also runs on Node.js and uses features of Windows, PowerShell, Linux, your Linux package manager, the libsecret `secret-tool` utility, and the Nexus release and cloud services.
 
 Those components remain subject to their own licenses and terms, which govern them to the extent required by their terms. Nothing in this License limits rights granted to you under an applicable open-source license. Notices and license information for these components are available from their respective packages.
 
@@ -85,13 +87,15 @@ Those components remain subject to their own licenses and terms, which govern th
 
 Nova helps you download and run the Nexus installer. The Nexus application you install is licensed to you under the [Software License](https://nexusworkspace.net/software-license).
 
+On Windows, Nova launches the Nexus installer, which may request administrator permission (UAC). On Linux, Nova installs `.deb` and `.rpm` packages by running your system's package manager, which requires root privileges and which Nova requests through `sudo` or `pkexec` (or runs directly if you are already root). AppImage installs on Linux require no root; Nova places files only in your own user directories, such as `~/.local/share` and `~/.local/bin`, including the AppImage, a launcher entry and an icon. You are responsible for deciding whether to grant those privileges.
+
 Nova may contact GitHub to find and download Nexus releases and the Nexus Cloud Service to sign you in and read account information, usage and service health. Those services have their own terms, and ordinary network information such as your IP address is visible to them when your computer connects. See the [Privacy Policy](https://nexusworkspace.net/privacy-policy) for details.
 
-Nova checks the integrity of the installers it downloads when a checksum is published for them, but it cannot guarantee that any download is free from defects. Windows may also show its own security prompts when you run an installer.
+Nova checks the integrity of the installers it downloads when a checksum is published for them, but it cannot guarantee that any download is free from defects. Windows or your Linux distribution may also show its own security prompts when you run an installer or install a package.
 
 ## 9. Updates and Availability
 
-The Operator may release new versions of Nova, change or remove commands and options, or stop distributing Nova at any time. Unless a new version is accompanied by different terms, this License applies to it. The Operator is not obligated to provide support, updates or any particular feature, except where applicable law requires it.
+The Operator may release new versions of Nova, change or remove commands and options, add or remove support for particular operating systems, or stop distributing Nova at any time. Unless a new version is accompanied by different terms, this License applies to it. The Operator is not obligated to provide support, updates or any particular feature, except where applicable law requires it.
 
 ## 10. Term and Termination
 
@@ -99,15 +103,15 @@ This License begins when you first install or run Nova and continues until termi
 
 The Operator may terminate this License if you materially breach it as described in Section 11 of the Software License, including the notice and opportunity to remedy that it provides where reasonably practicable and legally permitted. A material breach of this License is treated as a material breach of the Software License.
 
-On termination you must stop using Nova and delete the copies in your possession, except where retention is required by law. Uninstalling or losing the right to use Nova does not delete Your Content stored in Nexus on your device.
+On termination you must stop using Nova and delete the copies in your possession, except where retention is required by law. Uninstalling or losing the right to use Nova does not delete Your Content stored in Nexus on your device, and does not remove Nexus itself or any files Nova created for it, such as a Linux launcher entry or AppImage.
 
 ## 11. Disclaimer of Warranties
 
 **TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, NOVA IS PROVIDED "AS IS" AND "AS AVAILABLE," WITHOUT WARRANTIES OF ANY KIND, WHETHER EXPRESS, IMPLIED, STATUTORY OR OTHERWISE.**
 
-To the maximum extent permitted by law, the Operator disclaims implied warranties of merchantability, fitness for a particular purpose, title and non-infringement, and does not warrant that Nova will be uninterrupted, error-free, secure, compatible with every system, or free from defects.
+To the maximum extent permitted by law, the Operator disclaims implied warranties of merchantability, fitness for a particular purpose, title and non-infringement, and does not warrant that Nova will be uninterrupted, error-free, secure, compatible with every system or Linux distribution, or free from defects.
 
-Nova can run installers, change your installed software and write sign-in information to your computer's credential storage. You are responsible for deciding whether to run it, for reviewing what a command does before using it in automation, and for keeping backups of anything important. **You use Nova at your own risk.**
+Nova can run installers, run your package manager with elevated privileges, change your installed software and write sign-in information to your computer's credential storage. You are responsible for deciding whether to run it, for reviewing what a command does before using it in automation, and for keeping backups of anything important. **You use Nova at your own risk.**
 
 Nothing in this License excludes or limits any warranty, right or remedy that cannot lawfully be excluded or limited.
 
@@ -152,240 +156,3 @@ Morocco
 ---
 
 **Copyright © 2026 Nawrasse Andaloussi Dahman. All Rights Reserved.**
-
-**NOVA SOFTWARE LICENSE**
-
-Copyright (c) 2026 Nawrasse Andaloussi Dahman. All Rights Reserved.
-
-**Last updated:** October 13, 2026
-
-This Nova Software License ("License") governs the license granted to you for
-Nova, the official command-line companion for the Nexus application
-("Nova"). Nova is created and developed by Nawrasse Andaloussi Dahman, an
-independent developer based in Morocco.
-
-Nova is a proprietary command-line tool that helps you install and update
-Nexus, sign in to your Nexus account, view your Nexus Cloud AI usage, and
-check the status of Nexus services. This License applies to the proprietary
-portions of Nova, including version 1.0.0 and later, unless a later version is
-accompanied by different license terms.
-
-NOVA IS NOT OPEN-SOURCE SOFTWARE. Except for third-party components
-distributed under their own licenses, no right to copy, modify, distribute,
-publish, sublicense, or create derivative works from Nova is granted except as
-expressly provided by this License, the Nexus End User License Agreement
-("EULA"), applicable third-party licenses, or a separate written agreement
-signed by Nawrasse Andaloussi Dahman.
-
-
-1. RELATIONSHIP TO THE NEXUS EULA AND THE NEXUS SOFTWARE LICENSE
-
-Nova is part of the Nexus software ecosystem. Your use of Nova is governed by
-this License and by the [Nexus End User License Agreement](https://nexusworkspace.net/eula),
-which forms part of the legal terms governing Nova.
-Nova is treated as part of the "Software" for purposes of the
-EULA, and your use of Nexus Cloud Service features through Nova is governed by
-the EULA and the Nexus Privacy Policy.
-
-Capitalized terms used but not defined in this License, including "Software"
-and "Nexus Cloud Service," have the meanings given to them in the EULA.
-
-This License is intended to be consistent with the Nexus Software License that
-applies to the Nexus desktop application. If this License and the EULA
-conflict, including concerning the scope of the license granted, the permitted
-use of the Software or the Nexus Cloud Service, or termination, the EULA
-controls to the extent of that conflict.
-
-
-2. PROPRIETARY SOFTWARE
-
-Nova and its proprietary components are protected by applicable copyright,
-trademark, and other intellectual-property laws. Proprietary components
-include, where applicable:
-
-  - source code and compiled or packaged distributions;
-  - software architecture and implementation;
-  - command names, command-line interface design, and output formats;
-  - documentation and written materials;
-  - the names "Nova" and "Nexus," logos, and branding; and
-  - other original materials created for or incorporated into Nova.
-
-Except for third-party materials governed by their own licenses, these
-components are owned by or licensed to Nawrasse Andaloussi Dahman.
-
-
-3. LICENSE GRANT
-
-Subject to your compliance with this License and the EULA, Nawrasse Andaloussi
-Dahman grants you a limited, non-exclusive, non-transferable,
-non-sublicensable, revocable license to install and run Nova on devices that
-you own or are authorized to control, solely to install, update, and interact
-with Nexus and the Nexus Cloud Service as intended.
-
-The license permits use of Nova for your personal purposes and for your own
-internal business purposes, subject to the restrictions in this License and
-the EULA. You may make reasonable backup copies of Nova for archival purposes.
-
-This License grants a right to use Nova only. It does not transfer ownership
-of Nova or any intellectual-property rights to you. No implied license is
-granted. All rights not expressly granted are reserved.
-
-
-4. RESTRICTIONS
-
-Unless expressly permitted by this License, the EULA, applicable third-party
-licenses, or mandatory applicable law, you may not:
-
-  (a) copy, reproduce, or redistribute proprietary portions of Nova;
-  (b) publish, mirror, publicly host, or otherwise make proprietary portions
-      of Nova available to third parties;
-  (c) sell, rent, lease, sublicense, assign, or transfer Nova or the rights
-      granted under this License;
-  (d) modify, adapt, translate, or create derivative works from proprietary
-      portions of Nova;
-  (e) reverse engineer, decompile, disassemble, or attempt to derive source
-      code from Nova, except to the extent such activity cannot legally be
-      restricted;
-  (f) remove, obscure, or alter copyright, trademark, licensing, attribution,
-      or proprietary notices;
-  (g) use Nova or its proprietary components to create or provide a competing
-      product or service in violation of the EULA or another applicable
-      agreement;
-  (h) circumvent or interfere with technical, security, licensing,
-      authentication, access-control, rate-limit, or usage-restriction
-      mechanisms of Nova, Nexus, or the Nexus Cloud Service;
-  (i) use Nova to facilitate unauthorized access to the Nexus Cloud Service,
-      including by sharing, extracting, or reusing session tokens, API keys,
-      or other credentials stored or issued by Nova outside authorized Nexus
-      functionality;
-  (j) use Nova to distribute modified, unofficial, or malicious installers
-      as though they were official Nexus software; or
-  (k) use Nova in a manner prohibited by the EULA or applicable law.
-
-Nothing in this License prohibits conduct that applicable law expressly
-permits and that cannot lawfully be restricted by agreement.
-
-
-5. SOURCE CODE
-
-The Nova source code is proprietary and confidential intellectual property,
-except for portions that consist of or incorporate third-party components
-subject to separate licensing terms.
-
-No right to access, inspect, copy, modify, publish, distribute, reproduce, or
-create derivative works from proprietary Nova source code is granted under
-this License. Because Nova may be distributed as readable script files,
-the ability to read those files does not by itself grant any license or
-ownership rights beyond those expressly stated in this License.
-
-
-6. THIRD-PARTY SOFTWARE
-
-Nova depends upon third-party software that is distributed under licenses
-separate from this License, including the "commander" and "open" packages and
-their dependencies, which are made available under their own open-source
-licenses. Those components remain subject to their respective licenses, and
-nothing in this License restricts rights granted to you under them. Applicable
-license information is available in each package's distribution.
-
-
-7. NEXUS CLOUD SERVICE, CREDENTIALS, AND INSTALLERS
-
-Nova may connect to the Nexus Cloud Service, which is operated by the same
-developer but is a separate service governed by the EULA and the Nexus Privacy
-Policy. This License does not grant you any ownership or independent license
-to the infrastructure, server-side software, credentials, APIs, or other
-proprietary systems used to operate the Nexus Cloud Service.
-
-When you sign in using Nova, a session token is stored on your device in
-Nova's configuration directory. You are responsible for keeping that token
-confidential and for activity that occurs using it. You can revoke it at any
-time by signing out.
-
-Nova downloads Nexus installers from the official Nexus release channel. The
-Nexus application you install is governed by the Nexus Software License and
-the EULA.
-
-
-8. USER CONTENT
-
-This License does not claim ownership of content you create or store using
-Nexus. Nova does not transfer ownership of your content to Nawrasse
-Andaloussi Dahman. Your rights in your content are governed by the EULA and
-the Nexus Privacy Policy.
-
-
-9. TRADEMARKS AND BRANDING
-
-The names Nova and Nexus, associated logos, product names, branding, and other
-identifying marks may constitute trademarks or protected identifiers of
-Nawrasse Andaloussi Dahman or their respective owners. This License does not
-grant you permission to use them in a manner that suggests endorsement,
-sponsorship, affiliation, authorization, or ownership without prior written
-permission. Third-party names, trademarks, and logos remain the property of
-their respective owners.
-
-
-10. NO TRANSFER OF OWNERSHIP
-
-Your possession or authorized use of Nova does not give you ownership of Nova
-or any proprietary intellectual property contained in it. Except for the
-limited rights expressly granted, all rights, title, and interest in the
-proprietary portions of Nova remain with Nawrasse Andaloussi Dahman or the
-applicable rights holder.
-
-
-11. UPDATES AND NEW VERSIONS
-
-Nova may receive updates, patches, or new versions. Unless an update is
-accompanied by separate license terms, this License applies to the proprietary
-portions of the updated Nova. Nothing in this License requires Nawrasse
-Andaloussi Dahman to provide updates, maintain a particular version or
-feature, or continue distributing Nova, except as required by applicable law
-or expressly agreed otherwise.
-
-
-12. TERM AND TERMINATION
-
-The license granted under this License continues until it is terminated in
-accordance with Section 11 of the EULA, including the notice and opportunity
-to remedy that Section provides where reasonably practicable and legally
-permitted. A material breach of this License is treated as a material breach
-of the EULA for purposes of that Section.
-
-Upon termination of your license, you must cease using the proprietary
-portions of Nova and, to the extent reasonably practicable, delete copies of
-Nova in your possession, except where retention is required by law or
-reasonably necessary for legitimate archival, backup, or record-keeping
-purposes. Termination does not transfer ownership of your content or require
-the deletion of local content except as otherwise provided by applicable law
-or the EULA.
-
-
-13. DISCLAIMERS AND LIMITATION OF LIABILITY
-
-The disclaimers of warranty, limitations of liability, indemnification
-provisions, and dispute provisions in the EULA apply to Nova. Nothing in this
-License limits any mandatory right or protection that cannot legally be
-excluded or restricted under applicable law.
-
-
-14. RESERVATION OF RIGHTS
-
-All rights not expressly granted under this License are reserved by Nawrasse
-Andaloussi Dahman or the applicable third-party rights holder. No license,
-right, title, or permission is granted by implication, estoppel, exhaustion,
-or otherwise except to the extent expressly provided by applicable law.
-
-
-15. CONTACT
-
-Questions regarding this License may be directed to:
-
-  Nawrasse Andaloussi Dahman
-  Operator of Nexus
-  Morocco
-  Email: support@nexusworkspace.net
-
-
-Copyright (c) 2026 Nawrasse Andaloussi Dahman. All Rights Reserved.
