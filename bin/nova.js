@@ -59,8 +59,14 @@ const PLATFORM_KEY = env(
 );
 
 // The session token is sent to CLOUD, so it must always be a secure https endpoint.
-if (new URL(CLOUD).protocol !== "https:") {
-  console.error("Error: NEXUS_CLOUD_URL must use https.");
+let cloudProtocol = "";
+try {
+  cloudProtocol = new URL(CLOUD).protocol;
+} catch {
+  /* handled below */
+}
+if (cloudProtocol !== "https:") {
+  console.error("Error: NEXUS_CLOUD_URL must be a valid https URL.");
   process.exit(1);
 }
 
@@ -167,7 +173,8 @@ function assertTrustedDownload(url) {
 async function openUrl(url) {
   assertHttps(url);
   try {
-    await open(url);
+    const child = await open(url);
+    child?.once?.("error", () => { }); // a launcher that fails to spawn must not crash Nova
   } catch {
     console.log("Couldn't launch a browser. Open this link manually:");
   }
@@ -375,14 +382,6 @@ async function getWindowsInstalledVersion() {
 }
 
 const appImageMetaPath = () => path.join(xdgData(), "nova", "appimage.json");
-
-try {
-  const { file: desktopFile, iconFound } = await writeDesktopEntry(target, dir);
-  console.log(`Added a launcher entry: ${desktopFile}`);
-  if (!iconFound) console.log("Couldn't extract an icon from the AppImage; set NEXUS_ICON_PATH to use your own.");
-} catch (err) {
-  console.log(`Note: couldn't create the launcher entry (${err.message}).`);
-}
 
 async function readAppImageMeta() {
   try {
@@ -707,8 +706,8 @@ async function installSystemPackage(format, file, opts) {
 
 const desktopEntryPath = () => path.join(xdgData(), "applications", `${APP_BIN}.desktop`);
 
-/** Escapes a value for a quoted Exec= argument in a .desktop file. */
-const desktopQuote = (s) => `"${s.replace(/(["`$\\])/g, "\\$1")}"`;
+/** Quotes a path for an Exec= argument: escape ", `, $ and \ inside the quotes, then double every backslash for the key-file layer. */
+const desktopQuote = (s) => `"${s.replace(/(["`$\\])/g, "\\$1")}"`.replace(/\\/g, "\\\\");
 
 const BUNDLED_ICON = fileURLToPath(new URL("./nexus.png", import.meta.url));
 
