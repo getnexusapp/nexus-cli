@@ -2,7 +2,7 @@
 
 Official command-line companion for the [Nexus](https://www.nexusworkspace.net/) desktop app.
 
-Install Nexus, keep it up to date, sign in, check your Nexus Cloud AI usage and see how the service is doing, all from your terminal.
+Install Nexus, keep it up to date, sign in, check your Nexus Cloud AI usage, and see how the service is doing, all from your PowerShell or Terminal.
 
 > **Platform support:** Nexus is currently available for **Windows 10 and Windows 11** and for **Linux** (x64 and ARM64). Nova runs on both. macOS builds don't exist yet; when they do, Nova will gain support for them too.
 
