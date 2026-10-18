@@ -181,7 +181,7 @@ Still stuck? Run `nova doctor` and include its output when you contact support.
 - Nova only talks to the Nexus Cloud service, GitHub (for releases and downloads) and the sign-in provider pages you open in your browser. It does not collect analytics.
 - Secrets are never passed on the command line. On Windows, the Nexus Cloud key is handed to Windows Credential Manager through the environment of a short-lived process. On Linux, it is handed to `secret-tool` through standard input.
 - On Linux, installing a `.deb` or `.rpm` runs your package manager with root privileges through `sudo` or `pkexec`. Nova only does this for packages it has just downloaded from the official release channel. AppImage installs stay entirely inside your home directory.
-- Use of Nexus Cloud through Nova is covered by the Nexus End User License Agreement and Privacy Policy.
+- Use of Nexus Cloud through Nova is covered by the Nexus Software License and Privacy Policy.
 
 ## Support
 

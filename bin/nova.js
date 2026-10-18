@@ -383,17 +383,6 @@ async function getWindowsInstalledVersion() {
 
 const appImageMetaPath = () => path.join(xdgData(), "nova", "appimage.json");
 
-<<<<<<< HEAD
-=======
-try {
-  const { file: desktopFile, iconFound } = await writeDesktopEntry(target, dir);
-  console.log(`Added a launcher entry: ${desktopFile}`);
-  if (!iconFound) console.log("Couldn't extract an icon from the AppImage; set NEXUS_ICON_PATH to use your own.");
-} catch (err) {
-  console.log(`Note: couldn't create the launcher entry (${err.message}).`);
-}
-
->>>>>>> eb08d4aeeb315cb6ed2eebd689d6e4a25273f859
 async function readAppImageMeta() {
   try {
     const m = JSON.parse(await fs.readFile(appImageMetaPath(), "utf8"));
@@ -717,13 +706,8 @@ async function installSystemPackage(format, file, opts) {
 
 const desktopEntryPath = () => path.join(xdgData(), "applications", `${APP_BIN}.desktop`);
 
-<<<<<<< HEAD
 /** Quotes a path for an Exec= argument: escape ", `, $ and \ inside the quotes, then double every backslash for the key-file layer. */
 const desktopQuote = (s) => `"${s.replace(/(["`$\\])/g, "\\$1")}"`.replace(/\\/g, "\\\\");
-=======
-/** Escapes a value for a quoted Exec= argument in a .desktop file. */
-const desktopQuote = (s) => `"${s.replace(/(["`$\\])/g, "\\$1")}"`;
->>>>>>> eb08d4aeeb315cb6ed2eebd689d6e4a25273f859
 
 const BUNDLED_ICON = fileURLToPath(new URL("./nexus.png", import.meta.url));
 
