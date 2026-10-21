@@ -2,7 +2,43 @@
 
 Official command-line companion for the [Nexus](https://www.nexusworkspace.net/) desktop app.
 
-Install Nexus, keep it up to date, sign in, check your Nexus Cloud AI usage, and see how the service is doing, all from your PowerShell or Terminal.
+Install Nexus, keep it up to date, sign in, check your Nexus Cloud AI usage, and see how the service is doing, all from your PowerShell or Terminal. Run `nova` on its own to open the interactive shell, or call any command directly from scripts.
+
+```
+                ▗▄██▄▖
+             ▗▄████████▄▄
+          ▄▟██████████████▙▄
+        █████████████████████▖
+   ▄▄█▙▄▖ ▀▜████▛▀  ▀▜███████▌
+  ████████▄▖ ▀▘        ▝▀████▌   ▗▄█
+  ███████████▙▄           ▝▀▜▌▄▟████
+   ▝▀███████████▙▄▄          ▐██████
+  █▙▄ ▝▀▜█████████▌▐▄▖       ▐██████
+  █████▄▖ ▀▜████▛▀  ▀▜█▙▄    ▐██████
+  ██████▌    ▀▀█▄▄  ▄▄████▙▄ ▝▀█████
+  ██████▌       ▝▀▌▐██████████▄▖ ▀▜█
+  ██████▌          ▝▀▜███████████▄▖
+  ████▛▀▐▙▄            ▀▜███████████
+  █▀▘   ▐████▄▖        ▗▄ ▝▀████████
+        ▐███████▄▄  ▄▟████▙▄▖ ▀▜█▛▀
+        ▐█████████████████████
+         ▝▀▜██████████████▛▀
+             ▀▜████████▀▀
+                ▝▀██▀▘                Nova by Nexus Workspace
+
+  Nova CLI 2.4.0
+  Tab to autocomplete, ↑/↓ for history, Ctrl+C to quit
+
+  ────────────────────────────────────────────────────────────
+  >
+      check          Show installed and latest Nexus versions
+      clear          Clear the screen
+      doctor         Check whether your setup is ready
+      exit           Leave Nova
+      help           Show every command
+      install        Download and install the latest Nexus for your system
+      ...
+```
 
 > **Platform support:** Nexus is currently available for **Windows 10 and Windows 11** and for **Linux** (x64 and ARM64). Nova runs on both. macOS builds don't exist yet; when they do, Nova will gain support for them too.
 
@@ -17,6 +53,7 @@ All platforms:
 
 - Windows 10 or Windows 11 (64-bit; x64 or ARM64)
 - Windows on ARM PCs install the x64 build of Nexus, which Windows runs under emulation.
+- For the best look in the interactive shell, use Windows Terminal (or any terminal with true-color support).
 
 **Linux**
 
@@ -31,7 +68,7 @@ All platforms:
 
 ```sh
 npm install -g @getnexus/nova
-nova --help
+nova
 ```
 
 The `-g` flag matters: it puts the `nova` command on your PATH. If you'd rather not install it, you can run it once with `npx @getnexus/nova install`.
@@ -46,6 +83,14 @@ Then make sure `~/.local/bin` is on your PATH.
 
 ## Quick start
 
+Open the interactive shell and type commands as you go:
+
+```sh
+nova
+```
+
+Or run commands directly, which is what you want in scripts:
+
 ```sh
 nova install     # download and install the latest Nexus
 nova login       # sign in (or sign up) with Google or GitHub
@@ -54,10 +99,42 @@ nova usage       # see your Nexus Cloud AI usage
 
 Something not working? Run `nova doctor` first. It checks your Node.js version, operating system, internet access, the release feed, Nexus Cloud and your sign-in. On Linux it also lists the install formats available on your system and checks for `secret-tool` and a display.
 
+## Interactive shell
+
+Run `nova` with no arguments in a terminal to open the shell. You get the Nova logo, a prompt, and a live list of commands that narrows as you type.
+
+Type a command exactly as you would after `nova`, for example `check`, `usage` or `login --provider github`, and press Enter. Nova runs it, shows the output, and brings you back to the prompt.
+
+| Key | Action |
+| --- | --- |
+| `Tab` | Autocomplete the command (completes the shared prefix, or the whole name when only one matches) |
+| `↑` / `↓` | Move through the commands you ran earlier in this session |
+| `Enter` | Run the command |
+| `←` / `→`, `Home` / `End` | Move the cursor |
+| `Ctrl+A` / `Ctrl+E` | Jump to the start or end of the line |
+| `Ctrl+U` / `Ctrl+W` | Delete to the start of the line, or delete the previous word |
+| `Ctrl+C` | Quit Nova (while a command is running, it cancels that command and keeps the shell open) |
+| `Ctrl+D` | Quit Nova when the line is empty |
+
+Built-in shell commands:
+
+| Command | What it does |
+| --- | --- |
+| `help` | List every command with its description |
+| `clear` | Clear the screen and redraw the logo |
+| `exit` (or `quit`) | Leave the shell |
+
+Every regular command works inside the shell, because each one runs the same way as `nova <command>` from your normal terminal. Quote arguments that contain spaces, like `"this"`.
+
+The shell only opens in an interactive terminal. When Nova's output is piped or redirected, or when you pass any arguments, it behaves as the plain command-line tool, so scripts and CI are never affected.
+
+**Display notes.** The logo uses Unicode block characters and 24-bit color. Windows Terminal, PowerShell on Windows 11, and most Linux terminals show it correctly. Set the `NO_COLOR` environment variable to turn colors off. If the logo looks broken, switch your terminal to a font that includes block characters, such as Cascadia Code, Consolas or any common monospace font.
+
 ## Commands
 
 | Command | What it does |
 | --- | --- |
+| `nova` | Open the interactive shell (terminal only) |
 | `nova install [--passive\|--silent] [--format deb\|rpm\|appimage]` | Download and install the latest Nexus |
 | `nova update [--force] [--passive\|--silent] [--format deb\|rpm\|appimage]` | Install only if a newer release exists |
 | `nova check` | Show installed vs. latest version |
@@ -118,7 +195,7 @@ Downloads are restricted to GitHub over HTTPS, checked for size, and verified ag
 
 ## Signing in
 
-`nova login` only works once the Nexus desktop app is installed (run `nova install` first). New accounts are created automatically on first sign-in, so the same command signs you up or in.
+`nova login` only works once the Nexus desktop app is installed (run `nova install` first). New accounts are created automatically on first sign-in, so the same command signs you up or in. It works the same way inside the interactive shell.
 
 1. Nova shows a **confirmation code** and opens your browser (use `--no-browser` to print the link instead, which is handy over SSH or on a machine without a display).
 2. Authorize with Google or GitHub (`-p github` to use GitHub; Google is the default).
@@ -138,7 +215,7 @@ Nova and the app share one session, so `nova logout` signs you out of both and r
 
 ## Exit codes
 
-Nova exits with `0` on success and `1` on any error (including an unhealthy `nova status`), so it's safe to use in scripts.
+Nova exits with `0` on success and `1` on any error (including an unhealthy `nova status`), so it's safe to use in scripts. Always call commands directly in scripts (`nova update --silent`), not through the interactive shell.
 
 PowerShell:
 
@@ -158,6 +235,10 @@ nova update --silent || echo "Nexus update failed" >&2
 | Problem | What to try |
 | --- | --- |
 | `nova` is not recognized / command not found | Install with `npm install -g @getnexus/nova`, then open a new terminal window. On Linux, check that npm's global `bin` folder is on your PATH. |
+| Running `nova` prints help instead of opening the shell | The shell needs an interactive terminal. It won't open when input or output is piped or redirected, or when your terminal doesn't report itself as interactive. Try Windows Terminal, PowerShell or a standard Linux terminal. |
+| The logo shows gaps or odd characters | Use a font with block-character support (Cascadia Code, Consolas, DejaVu Sans Mono) and a terminal with Unicode support. |
+| Colors look wrong or missing | Use a terminal with true-color support, such as Windows Terminal. The legacy `cmd.exe` console is limited. Check that `NO_COLOR` isn't set. |
+| The prompt or command list looks garbled after resizing | Type `clear` to redraw the screen. |
 | "Nova currently supports Windows 10/11 and Linux only" | Nexus isn't available for macOS or other systems yet. |
 | "GitHub rate limit reached" | Wait a while, or set the `GITHUB_TOKEN` environment variable. |
 | Installer doesn't appear (Windows) | Check for a UAC prompt or a SmartScreen warning, or run `nova install --passive`. |
@@ -179,6 +260,7 @@ Still stuck? Run `nova doctor` and include its output when you contact support.
 ## Privacy and security
 
 - Nova only talks to the Nexus Cloud service, GitHub (for releases and downloads) and the sign-in provider pages you open in your browser. It does not collect analytics.
+- The interactive shell runs locally and keeps its command history in memory only for the current session. Nothing you type in it is saved or sent anywhere.
 - Secrets are never passed on the command line. On Windows, the Nexus Cloud key is handed to Windows Credential Manager through the environment of a short-lived process. On Linux, it is handed to `secret-tool` through standard input.
 - On Linux, installing a `.deb` or `.rpm` runs your package manager with root privileges through `sudo` or `pkexec`. Nova only does this for packages it has just downloaded from the official release channel. AppImage installs stay entirely inside your home directory.
 - Use of Nexus Cloud through Nova is covered by the Nexus Software License and Privacy Policy.

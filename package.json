@@ -1,6 +1,6 @@
 {
   "name": "@getnexus/nova",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Official CLI companion for Nexus - install, update, sign in and check Nexus from your powershell or terminal.",
   "type": "module",
   "license": "UNLICENSED",

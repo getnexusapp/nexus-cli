@@ -1216,7 +1216,16 @@ program
     })
   );
 
-program.parseAsync(process.argv).catch((err) => {
-  console.error(err.message);
-  process.exitCode = 1;
-});
+// `nova` with no arguments in a real terminal opens the interactive shell.
+if (process.argv.length <= 2 && process.stdin.isTTY && process.stdout.isTTY) {
+  const { startTui } = await import("./tui.js");
+  await startTui({
+    version: VERSION,
+    commands: program.commands.map((c) => [c.name(), c.description()]),
+  });
+} else {
+  program.parseAsync(process.argv).catch((err) => {
+    console.error(err.message);
+    process.exitCode = 1;
+  });
+}
